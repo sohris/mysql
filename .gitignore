@@ -1,0 +1,6 @@
+config
+log
+vendor
+app.php
+bootstrap.php
+composer.lock

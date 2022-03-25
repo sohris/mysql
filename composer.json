@@ -1,0 +1,21 @@
+{
+    "name": "sohris/mysql",
+    "type": "library",
+    "version": "0.1.0",
+    "require": {
+        "sohris/core": "^0.2.10",
+        "react/promise": "^2.9"
+    },
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Sohris\\Mysql\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Rodrigo Danieli",
+            "email": "rodri.merlucci@gmail.com"
+        }
+    ]
+}
