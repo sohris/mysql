@@ -26,11 +26,17 @@ class Component extends AbstractComponent
 
     public function install()
     {
-        Pool::createConnection();
     }
 
     public function start()
     {
+    }
+
+    public function startPool()
+    {
+
+        Pool::createConnection();
+
         Pool::startPool();
     }
 
