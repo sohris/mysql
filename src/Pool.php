@@ -109,15 +109,23 @@ final class Pool
             foreach ($links as $conn) {
                 if (!$result = $conn->reap_async_query())
                     self::rejectQuery($conn_key, mysqli_error($conn));
-                $resolve = [];
-                while($row = $result->fetch_assoc())
-                {
-                    $resolve[]=$row;
-                }
-                self::resolveQuery($conn_key, $resolve);
+                if (!$result)
+                    continue;
+                else if (!$result === true) {
+                    self::resolveQuery($conn_key, $result);
 
-                if (is_object($result))
-                    mysqli_free_result($result);
+                    if (is_object($result))
+                        mysqli_free_result($result);
+                } else {
+                    $resolve = [];
+                    while ($row = $result->fetch_assoc()) {
+                        $resolve[] = $row;
+                    }
+                    self::resolveQuery($conn_key, $resolve);
+
+                    if (is_object($result))
+                        mysqli_free_result($result);
+                }
             }
         }
     }
