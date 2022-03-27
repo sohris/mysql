@@ -2,12 +2,14 @@
 
 namespace Sohris\Mysql;
 
+use Exception;
 use React\EventLoop\Loop;
 use React\EventLoop\LoopInterface;
 use React\Promise\Deferred;
 use React\Promise\PromiseInterface;
 use Sohris\Core\Logger;
 use Sohris\Core\Utils;
+use Throwable;
 
 final class Pool
 {
@@ -38,8 +40,11 @@ final class Pool
         self::$logger->debug(self::$configs['pool_size'] . " Connection In Pool");
         try {
             for ($i = 0; $i < self::$configs['pool_size']; $i++) {
+                $conn = \mysqli_connect(self::$configs['host'], self::$configs['user'], self::$configs['pass'], self::$configs['base'], self::$configs['port']);
+                if (!$conn)
+                    throw new Exception("Cannot create connection - " . mysqli_connect_error());
                 self::$list_of_mysqli[$i] = [
-                    "connection" => \mysqli_connect(self::$configs['host'], self::$configs['user'], self::$configs['pass'], self::$configs['base'], self::$configs['port']),
+                    "connection" => $conn,
                     "query_exec" => null,
                     "status" => 'sleeping',
                     "key" => $i
@@ -50,6 +55,10 @@ final class Pool
         }
     }
 
+    private static function reconnectConnection(&$conn)
+    {
+        \mysqli_real_connect($conn, self::$configs['host'], self::$configs['user'], self::$configs['pass'], self::$configs['base'], self::$configs['port']);
+    }
     private static function firstRun()
     {
         if (!self::$configs) {
@@ -72,6 +81,42 @@ final class Pool
     {
         self::$query_list_timer = self::$loop->addPeriodicTimer(0.001, fn () => self::checkNextQuery());
         self::$query_resolver_timer = self::$loop->addPeriodicTimer(0.001, fn () => self::checkResolveQuery());
+        // self::$loop->addPeriodicTimer(5, function () {
+        //     $sumarizacao = [
+        //         "total" => 0,
+        //         "waiting" => 0,
+        //         "running" => 0
+        //     ];
+        //     foreach (self::$query_list as $query) {
+        //         ++$sumarizacao['total'];
+        //         if ($query['status'] == 'waiting')
+        //             ++$sumarizacao['waiting'];
+        //         else
+        //             ++$sumarizacao['running'];
+        //     }
+        //     //echo "$sumarizacao[running]/$sumarizacao[waiting]/$sumarizacao[total]" . PHP_EOL;
+        // });
+        // self::$loop->addPeriodicTimer(5, function () {
+        //     $time = Utils::microtimeFloat();
+        //     foreach (self::$query_list as $query) {
+        //         if ($query['status'] == 'running') {
+        //             $diff = $time - $query['start'];
+        //             if ($diff > 3)
+        //                 echo "SlowQuery - $query[query] - " . $diff . PHP_EOL;
+        //         }
+        //     }
+        // });
+        // self::$loop->addPeriodicTimer(5, function () {
+        //     $time = Utils::microtimeFloat();
+        //     foreach (array_filter(self::$list_of_mysqli, fn ($mi) => $mi['status'] == 'running') as $conn) {
+        //         $query = self::$query_list[$conn['query_key']];
+        //         if ($query['status'] == 'running') {
+        //             $diff = $time - $query['start'];
+        //             if ($diff > 3)
+        //                 echo "SlowQueryConn - $query[query] - " . $diff . PHP_EOL;
+        //         }
+        //     }
+        // });
     }
 
     private static function checkNextQuery()
@@ -90,7 +135,7 @@ final class Pool
         $query_key = $query_config['key'];
 
 
-        $conn->query($query, MYSQLI_ASYNC);
+        $conn->query($query, MYSQLI_ASYNC | MYSQLI_STORE_RESULT);
 
         self::setQueryRunning($query_key);
         self::setConnectionRunning($conn_key, $query_key);
@@ -98,35 +143,49 @@ final class Pool
 
     private static function checkResolveQuery()
     {
-        foreach (array_filter(self::$list_of_mysqli, fn ($mi) => $mi['status'] == 'running') as $link) {
-            $links = $errors = $rejects = [];
-            $links[] = $errors[] = $rejects[] = $link['connection'];
-            $conn_key = $link['key'];
-            if (!mysqli_poll($links, $errors, $rejects, false, 1000)) {
-                continue;
-            }
+        try {
 
-            foreach ($links as $conn) {
-                if (!$result = $conn->reap_async_query())
-                    self::rejectQuery($conn_key, mysqli_error($conn));
-                if (!$result)
+            foreach (array_filter(self::$list_of_mysqli, fn ($mi) => $mi['status'] == 'running') as $link) {
+                //echo "Checking $link[key]" . PHP_EOL;
+                $links = $errors = $rejects = [];
+                $links[] = $errors[] = $rejects[] = $link['connection'];
+                $conn_key = $link['key'];
+                if (!mysqli_poll($links, $errors, $rejects, false, 10000)) {
                     continue;
-                else if (!$result === true) {
-                    self::resolveQuery($conn_key, $result);
+                }
+                //echo "Results $link[key] => " . count($links) . "/" . count($errors) . "/" . count($rejects) . PHP_EOL;
+                foreach ($errors as $conn) {
 
-                    if (is_object($result))
-                        mysqli_free_result($result);
-                } else {
-                    $resolve = [];
-                    while ($row = $result->fetch_assoc()) {
-                        $resolve[] = $row;
+                    self::$logger->critical("Query Error", mysqli_error($conn));
+                    self::reconnectConnection($conn);
+                    self::rejectQuery($conn_key, "INTERNAL_ERROR");
+                }
+                foreach ($rejects as $conn) {
+                    $err = mysqli_error($conn);
+                    self::$logger->critical("Query Reject", $err);
+                    self::rejectQuery($conn_key, $err);
+                }
+
+                foreach ($links as $conn) {
+                    if (!$result = $conn->reap_async_query())
+                        self::rejectQuery($conn_key, mysqli_error($conn));
+                    if (!$result)
+                        continue;
+                    else if ($result === true) {
+                        self::resolveQuery($conn_key, $result);
+                    } else {
+                        $resolve = $result->fetch_all(MYSQLI_ASSOC);
+                        if (is_object($result))
+                            mysqli_free_result($result);
+                        //$result->close();
+                        $conn->next_result();
+                        self::resolveQuery($conn_key, $resolve);
                     }
-                    self::resolveQuery($conn_key, $resolve);
-
-                    if (is_object($result))
-                        mysqli_free_result($result);
                 }
             }
+        } catch (Throwable $e) {
+            self::$logger->critical($e->getMessage());
+            self::resolveQuery($conn_key, []);
         }
     }
 
@@ -135,9 +194,9 @@ final class Pool
         $query_key =  self::$list_of_mysqli[$connection_key]['query_key'];
         $query_config = self::$query_list[$query_key];
         $deferrend = $query_config['deferrend'];
-        $deferrend->reject($erro_msg);
         self::clearConnection($connection_key);
         self::clearQueryList($query_key);
+        $deferrend->reject($erro_msg);
     }
 
     private static function resolveQuery($connection_key, $result)
@@ -145,9 +204,9 @@ final class Pool
         $query_key =  self::$list_of_mysqli[$connection_key]['query_key'];
         $query_config = self::$query_list[$query_key];
         $deferrend = $query_config['deferrend'];
-        $deferrend->resolve($result);
         self::clearConnection($connection_key);
         self::clearQueryList($query_key);
+        $deferrend->resolve($result);
     }
 
     private static function clearConnection($connection_key)
@@ -158,13 +217,22 @@ final class Pool
 
     private static function clearQueryList($query_key)
     {
+        $finish = Utils::microtimeFloat();
+        $query = self::$query_list[$query_key]['query'];
+        $context = "Query Finish - Total => " . ($finish - self::$query_list[$query_key]['entre']) . " - Exec => " . ($finish - self::$query_list[$query_key]['start']);
+        self::$logger->debug($context, [$query]);
         unset(self::$query_list[$query_key]);
     }
 
     private static function setQueryRunning($key)
     {
         self::$query_list[$key]['status'] = 'running';
+        self::$query_list[$key]['start'] = Utils::microtimeFloat();
+        $query = self::$query_list[$key]['query'];
+        $context = "Start Query";
+        self::$logger->debug($context, [$query]);
     }
+
     private static function setConnectionRunning($key, $query_key)
     {
         self::$list_of_mysqli[$key]['status'] = 'running';
@@ -206,8 +274,10 @@ final class Pool
         self::$query_list[$key] = [
             "key" => $key,
             "query" => $query,
-            "deferrend" => $deferrend,
-            "status" => "waiting"
+            "deferrend" => &$deferrend,
+            "status" => "waiting",
+            "entre" => Utils::microtimeFloat(),
+            "start" => 0
         ];
 
         return $deferrend->promise();
