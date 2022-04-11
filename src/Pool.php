@@ -36,7 +36,6 @@ final class Pool
         } catch (\Throwable $e) {
             echo $e->getMessage();
         }
-        self::startPool();
     }
 
     private static function firstRun()
@@ -57,16 +56,22 @@ final class Pool
         }
     }
 
-    public static function startPool()
+    public function exec(string $query, array $parameters = []): PromiseInterface
     {
-        // self::$loop->addPeriodicTimer(15, function () {
-        //     $used_mem2 = Utils::bytesToHuman(memory_get_peak_usage());
-        //     $used_mem4 = Utils::bytesToHuman(memory_get_peak_usage(true));
-        //     echo "Memory $used_mem2 / $used_mem4 - ". PHP_EOL;
-        // });
+        $sql = new Query($query, $parameters);
+        return Mysql::queueQuery($sql);
     }
-    public function exec($query, $query_mode = 0): PromiseInterface
+
+    public function checkIfNeededMoreConnections()
     {
-        return Mysql::queueQuery($query, $query_mode);
+        if($this->isOverloaded())
+        {
+            self::$list_of_mysqli[] = new Mysql;
+        }
+    }
+    
+    private function isOverloaded()
+    {
+        return Mysql::getQueueCount() >= sizeof(self::$list_of_mysqli);
     }
 }

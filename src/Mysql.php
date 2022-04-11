@@ -24,7 +24,7 @@ class Mysql extends \mysqli
 
     private $query_running;
 
-
+    private static $any_connection;
     /**
      * @var \SplQueue
      */
@@ -37,7 +37,7 @@ class Mysql extends \mysqli
 
     public function __construct()
     {
-        self::firstRun();
+        $this->firstRun();
         $this->loop = Loop::get();
         parent::__construct(self::$configs['host'], self::$configs['user'], self::$configs['pass'], self::$configs['base'], self::$configs['port']);
         $this->query("SET @@time_zone='UTC';");
@@ -45,7 +45,7 @@ class Mysql extends \mysqli
         $this->startTimer();
     }
 
-    public static function firstRun()
+    public function firstRun()
     {
         if (!self::$query_list) {
             self::$query_list = new SplQueue;
@@ -58,6 +58,9 @@ class Mysql extends \mysqli
         if (!self::$logger) {
             self::$logger = new Logger("Mysql");
         }
+
+        if(!self::$any_connection)
+            self::$any_connection = $this;
     }
 
     private function startTimer()
@@ -86,11 +89,14 @@ class Mysql extends \mysqli
         if (self::$query_list->isEmpty())
             return;
 
+        if(!$this->ping())
+        {
+            self::$logger->critical("Mysql Server has gone away!");
+        }
+        
         $this->stopTimer();
-
         $this->query_running = self::$query_list->dequeue();
-
-        $this->query($this->query_running['query'], MYSQLI_ASYNC | MYSQLI_USE_RESULT);
+        $this->query($this->query_running['query']->getSQL(), MYSQLI_ASYNC | MYSQLI_USE_RESULT);
         $this->timer_check_query = $this->loop->addPeriodicTimer(0.001, fn () => $this->checkPoll());
     }
 
@@ -121,10 +127,7 @@ class Mysql extends \mysqli
     {
         if ($result === true)
             return $this->query_running['deferrend']->resolve($result);
-        //if ($this->query_running['query_mode'] == 0)
         return $this->query_running['deferrend']->resolve($result->fetch_all(MYSQLI_ASSOC));
-
-        //return $this->query_running['deferrend']->resolve($result);
     }
 
     public function running()
@@ -140,11 +143,21 @@ class Mysql extends \mysqli
         $this->loop->cancelTimer($this->timer_check_query);
         unset($this->query_running);
         $this->startTimer();
-        //$this->last_running = Utils::microtimeFloat();
+        $this->last_running = Utils::microtimeFloat();
     }
 
     public function soSleep()
     {
-        return $this->last_running && Utils::microtimeFloat() - $this->last_running >= 1;
+        return $this->last_running && Utils::microtimeFloat() - $this->last_running >= 60;
+    }
+
+    public static function realEscapeString(string $string)
+    {
+        return self::$any_connection->real_escape_string($string);
+    }
+
+    public static function getQueueCount()
+    {
+        return self::$query_list->count();
     }
 }
