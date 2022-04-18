@@ -41,7 +41,8 @@ class Mysql extends \mysqli
         $this->loop = Loop::get();
         parent::__construct(self::$configs['host'], self::$configs['user'], self::$configs['pass'], self::$configs['base'], self::$configs['port']);
         $this->query("SET @@time_zone='UTC';");
-        $this->set_charset("utf8mb4");
+        if (key_exists('charset', self::$configs))
+            $this->set_charset(self::$configs['charset']);
         $this->startTimer();
     }
 
@@ -59,7 +60,7 @@ class Mysql extends \mysqli
             self::$logger = new Logger("Mysql");
         }
 
-        if(!self::$any_connection)
+        if (!self::$any_connection)
             self::$any_connection = $this;
     }
 
@@ -89,11 +90,10 @@ class Mysql extends \mysqli
         if (self::$query_list->isEmpty())
             return;
 
-        if(!$this->ping())
-        {
+        if (!$this->ping()) {
             self::$logger->critical("Mysql Server has gone away!");
         }
-        
+
         $this->stopTimer();
         $this->query_running = self::$query_list->dequeue();
         $this->query($this->query_running['query']->getSQL(), MYSQLI_ASYNC | MYSQLI_USE_RESULT);
