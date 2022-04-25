@@ -2,6 +2,7 @@
 
 namespace Sohris\Mysql;
 
+use mysqli;
 use React\EventLoop\Loop;
 use React\EventLoop\LoopInterface;
 use React\Promise\Deferred;
@@ -20,6 +21,7 @@ class Mysql extends \mysqli
      */
     private $loop;
 
+    private $mysql;
     private $timer;
 
     private $query_running;
@@ -39,11 +41,20 @@ class Mysql extends \mysqli
     {
         $this->firstRun();
         $this->loop = Loop::get();
-        parent::__construct(self::$configs['host'], self::$configs['user'], self::$configs['pass'], self::$configs['base'], self::$configs['port']);
-        $this->query("SET @@time_zone='UTC';");
-        if (key_exists('charset', self::$configs))
-            $this->set_charset(self::$configs['charset']);
+        $this->createConnection();
         $this->startTimer();
+    }
+
+    private function createConnection()
+    {
+        try {
+            $this->mysql = new mysqli(self::$configs['host'], self::$configs['user'], self::$configs['pass'], self::$configs['base'], self::$configs['port']);
+            $this->mysql->query("SET @@time_zone='UTC';");
+            if (key_exists('charset', self::$configs))
+                $this->mysql->set_charset(self::$configs['charset']);
+        } catch (Throwable $e) {
+            self::$logger->critical("Can not create Mysqli Connection!", [$e->getMessage()]);
+        }
     }
 
     public function firstRun()
@@ -61,7 +72,7 @@ class Mysql extends \mysqli
         }
 
         if (!self::$any_connection)
-            self::$any_connection = $this;
+            self::$any_connection = $this->mysql;
     }
 
     private function startTimer()
@@ -89,26 +100,28 @@ class Mysql extends \mysqli
     {
         if (self::$query_list->isEmpty())
             return;
-
-        if (!$this->ping()) {
-            self::$logger->critical("Mysql Server has gone away!");
+        
+        if (!$this->mysql->ping() || !$this->mysql) {
+            $this->createConnection();
+            self::$logger->critical("Reconnect Mysql!");
+            return;
         }
 
         $this->stopTimer();
         $this->query_running = self::$query_list->dequeue();
-        $this->query($this->query_running['query']->getSQL(), MYSQLI_ASYNC | MYSQLI_USE_RESULT);
+        $this->mysql->query($this->query_running['query']->getSQL(), MYSQLI_ASYNC | MYSQLI_USE_RESULT);
         $this->timer_check_query = $this->loop->addPeriodicTimer(0.001, fn () => $this->checkPoll());
     }
 
     private function checkPoll()
     {
         $links = $err = $rej = [];
-        $links[] = $err[] = $rej[] = $this;
+        $links[] = $err[] = $rej[] = $this->mysql;
 
         try {
             if (!mysqli_poll($links, $err, $rej, false, 10000))
                 return;
-            if (!$result = $this->reap_async_query())
+            if (!$result = $this->mysql->reap_async_query())
                 $this->rejectQuery();
             else
                 $this->resolveQuery($result);
@@ -120,7 +133,7 @@ class Mysql extends \mysqli
 
     private function rejectQuery()
     {
-        $this->query_running['deferrend']->reject($this->error);
+        $this->query_running['deferrend']->reject($this->mysql->error);
     }
 
     private function resolveQuery(&$result)
@@ -137,8 +150,8 @@ class Mysql extends \mysqli
 
     private function freeConnection()
     {
-        mysqli_next_result($this);
-        if ($result = mysqli_store_result($this))
+        mysqli_next_result($this->mysql);
+        if ($result = mysqli_store_result($this->mysql))
             mysqli_free_result($result);
         $this->loop->cancelTimer($this->timer_check_query);
         unset($this->query_running);
