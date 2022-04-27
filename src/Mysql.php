@@ -41,20 +41,22 @@ class Mysql extends \mysqli
     {
         $this->firstRun();
         $this->loop = Loop::get();
-        $this->createConnection();
+        $this->mysql = self::createConnection();
         $this->startTimer();
     }
 
     private function createConnection()
     {
         try {
-            $this->mysql = new mysqli(self::$configs['host'], self::$configs['user'], self::$configs['pass'], self::$configs['base'], self::$configs['port']);
-            $this->mysql->query("SET @@time_zone='UTC';");
+            $mysql = new mysqli(self::$configs['host'], self::$configs['user'], self::$configs['pass'], self::$configs['base'], self::$configs['port']);
+            $mysql->query("SET @@time_zone='UTC';");
             if (key_exists('charset', self::$configs))
-                $this->mysql->set_charset(self::$configs['charset']);
+                $mysql->set_charset(self::$configs['charset']);
+            return $mysql;
         } catch (Throwable $e) {
             self::$logger->critical("Can not create Mysqli Connection!", [$e->getMessage()]);
         }
+        return null;
     }
 
     public function firstRun()
@@ -165,7 +167,9 @@ class Mysql extends \mysqli
     }
 
     public static function realEscapeString(string $string)
-    {
+    {   
+        if(!self::$any_connection || !self::$any_connection->ping())
+           self::$any_connection = self::createConnection();
         return self::$any_connection->real_escape_string($string);
     }
 
