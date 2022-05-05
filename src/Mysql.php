@@ -104,7 +104,7 @@ class Mysql extends \mysqli
             return;
         
         if (!$this->mysql->ping() || !$this->mysql) {
-            $this->createConnection();
+            $this->mysql = $this->createConnection();
             self::$logger->critical("Reconnect Mysql!");
             return;
         }
