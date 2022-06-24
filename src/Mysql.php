@@ -45,7 +45,7 @@ class Mysql extends \mysqli
         $this->startTimer();
     }
 
-    private function createConnection()
+    private static function createConnection()
     {
         try {
             $mysql = new mysqli(self::$configs['host'], self::$configs['user'], self::$configs['pass'], self::$configs['base'], self::$configs['port']);
