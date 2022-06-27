@@ -27,6 +27,7 @@ class Mysql extends \mysqli
     private $query_running;
 
     private static $any_connection;
+
     /**
      * @var \SplQueue
      */
@@ -141,7 +142,7 @@ class Mysql extends \mysqli
     private function resolveQuery(&$result)
     {
         if ($result === true)
-            return $this->query_running['deferrend']->resolve($result);
+            return $this->query_running['deferrend']->resolve($this->mysql->insert_id);
         return $this->query_running['deferrend']->resolve($result->fetch_all(MYSQLI_ASSOC));
     }
 

@@ -1,7 +1,7 @@
 {
     "name": "sohris/mysql",
     "type": "library",
-    "version": "0.1.11",
+    "version": "0.1.12",
     "require": {
         "sohris/core": "^0.2.10",
         "react/promise": "^2.9"
