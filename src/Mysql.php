@@ -46,6 +46,11 @@ class Mysql extends \mysqli
         $this->startTimer();
     }
 
+    public function __destruct()
+    {
+        $this->mysql->close();
+    }
+
     private static function createConnection()
     {
         try {
