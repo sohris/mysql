@@ -1,9 +1,9 @@
 {
     "name": "sohris/mysql",
     "type": "library",
-    "version": "0.1.13",
+    "version": "0.2.1",
     "require": {
-        "sohris/core": "^0.2.10",
+        "sohris/core": "^0.3",
         "react/promise": "^2.9"
     },
     "license": "MIT",

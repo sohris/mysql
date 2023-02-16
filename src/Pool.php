@@ -2,21 +2,16 @@
 
 namespace Sohris\Mysql;
 
-use Exception;
 use React\EventLoop\Loop;
 use React\EventLoop\LoopInterface;
-use React\Promise\Deferred;
 use React\Promise\PromiseInterface;
 use Sohris\Core\Logger;
 use Sohris\Core\Utils;
-use Throwable;
 
 final class Pool
 {
+
     private static $list_of_mysqli = [];
-
-    private static $query_list = [];
-
     private static $configs = [];
 
     /**
@@ -24,14 +19,20 @@ final class Pool
      */
     private static $loop;
     private static $logger;
+    private static $debug = false;
+    private static $queries_runned = 0;
+    private static $queries_rejectes = 0;
+    private static $queries_timeout = 0;
+    private static $list_rejected_queries = [];
 
     public static function createConnection()
     {
+
         self::firstRun();
         self::$logger->debug(self::$configs['pool_size'] . " Connection In Pool");
         try {
             for ($i = 0; $i < self::$configs['pool_size']; $i++) {
-                self::$list_of_mysqli[] = new Mysql;
+                self::$list_of_mysqli[] = new Connector;
             }
         } catch (\Throwable $e) {
             echo $e->getMessage();
@@ -40,8 +41,12 @@ final class Pool
 
     private static function firstRun()
     {
+        if (!self::$list_of_mysqli)
+            self::$list_of_mysqli = [];
+
         if (!self::$configs) {
             self::$configs = Utils::getConfigFiles('mysql');
+            self::$debug = Utils::getConfigFiles('system')['debug'];
         }
 
         if (!self::$logger) {
@@ -59,19 +64,73 @@ final class Pool
     public function exec(string $query, array $parameters = []): PromiseInterface
     {
         $sql = new Query($query, $parameters);
-        return Mysql::queueQuery($sql);
+        self::$queries_runned++;
+        return Connector::queueQuery($sql)->then(fn ($result) => $result, function ($e) use ($query, $parameters) {
+            self::$list_rejected_queries[] = [
+                'query' => $query,
+                'params' => $parameters
+            ];
+            if ($e->getMessage() == "QUERY_TIMEOUT")
+                self::$queries_timeout++;
+            else
+                self::$queries_rejectes++;
+            if(self::$debug)
+            {
+                echo "ERROR Query - " . $e->getMessage() . PHP_EOL;
+            }
+            return $e;
+        });
     }
 
-    public function checkIfNeededMoreConnections()
+    private static function isOverloaded()
     {
-        if($this->isOverloaded())
-        {
-            self::$list_of_mysqli[] = new Mysql;
+        $diff = Connector::getQueueCount() - count(self::$list_of_mysqli);
+        return $diff >= (3 * count(self::$list_of_mysqli)) ? $diff : 0;
+    }
+
+    public static function checkConnection()
+    {
+
+        if (count(self::$list_of_mysqli) <  self::$configs['pool_size']) {
+            for ($i = 0; $i < self::$configs['pool_size'] - count(self::$list_of_mysqli); $i++) {
+                self::$list_of_mysqli[] = new Connector;
+            }
         }
+
+        $ov = self::isOverloaded();
+        if ($ov > 0) {
+            for ($i = 0; $i < (int)($ov / 3); $i++) {
+                self::$list_of_mysqli[] = new Connector;
+            }
+        }
+
+        if (count(self::$list_of_mysqli) ==  self::$configs['pool_size']) return;
+        for ($i = 0; $i < count(self::$list_of_mysqli); $i++) {
+            if (self::$list_of_mysqli[$i] instanceof Connector && self::$list_of_mysqli[$i]->soSleep()) {
+                self::$list_of_mysqli[$i]->close();
+                unset(self::$list_of_mysqli[$i]);
+            }
+        }
+        self::$list_of_mysqli = array_values(self::$list_of_mysqli);
     }
-    
-    private function isOverloaded()
+
+    public static function getStats()
     {
-        return Mysql::getQueueCount() >= sizeof(self::$list_of_mysqli);
+        return [
+            'total_queries' => self::$queries_runned,
+            'total_queries_runned' => self::$queries_runned - self::$queries_rejectes - self::$queries_timeout,
+            'total_queries_rejected' => self::$queries_rejectes,
+            'total_queries_timeout' => self::$queries_timeout,
+            'current_pool' => count(self::$list_of_mysqli),
+            'queue_queries' => Connector::getQueueCount()
+        ];
     }
+
+    public static function dumpRejectedQueries()
+    {
+        $queries = self::$list_rejected_queries;
+        self::$list_rejected_queries = [];
+        return $queries;
+    }
+
 }

@@ -2,37 +2,17 @@
 
 namespace Sohris\Mysql;
 
-use Exception;
-use React\EventLoop\Loop;
-use React\EventLoop\LoopInterface;
-use React\Promise\Deferred;
-use React\Promise\PromiseInterface;
-use Sohris\Core\Logger;
-use Sohris\Core\Utils;
-use Throwable;
-
 final class Query
 {
 
     private $sql = '';
     private $parameters = [];
 
-    private static $logger;
-
-
     public function __construct(string $query, array $parameters)
     {
-        self::firstRun();
         $this->sql = $query;
         $this->parameters = $parameters;
-        
-    }
 
-    private static function firstRun()
-    {
-        if (!self::$logger) {
-            self::$logger = new Logger("MysqlQueries");
-        }
     }
     
     private function resolveSQLValue($value)
@@ -46,7 +26,7 @@ final class Query
             case 'integer':
                 break;
             case 'string':
-                $value = "'" . Mysql::realEscapeString($value) . "'";
+                $value = "'" . Connector::realEscapeString($value) . "'";
                 break;
             case 'array':
                 $nvalue = [];
