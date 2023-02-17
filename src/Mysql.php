@@ -15,18 +15,20 @@ class Mysql extends ComponentControl
     public function __construct()
     {
         $this->server = Server::getServer();
+        Pool::createConnection();
+        
+        Loop::addPeriodicTimer(10, function (){
+            Pool::checkConnection();
+        });
     }
 
     public function install()
     {
-        Pool::createConnection();
+      
     }
 
     public function start()
     {
-        Loop::addPeriodicTimer(10, function (){
-            Pool::checkConnection();
-        });
     }
 
     public function getName(): string
