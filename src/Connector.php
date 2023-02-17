@@ -197,6 +197,10 @@ class Connector
 
     public static function getQueueCount()
     {
+        if (!self::$query_list) {
+            self::$query_list = new SplQueue;
+        }
+
         return self::$query_list->count();
     }
 }
