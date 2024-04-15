@@ -2,6 +2,7 @@
 
 namespace Sohris\Mysql;
 
+use Exception;
 use React\EventLoop\Loop;
 use React\EventLoop\LoopInterface;
 use React\Promise\PromiseInterface;
@@ -19,7 +20,6 @@ final class Pool
      */
     private static $loop;
     private static $logger;
-    private static $debug = false;
     private static $queries_runned = 0;
     private static $queries_rejectes = 0;
     private static $queries_timeout = 0;
@@ -35,7 +35,7 @@ final class Pool
                 self::$list_of_mysqli[] = new Connector;
             }
         } catch (\Throwable $e) {
-            echo $e->getMessage();
+            self::$logger->throwable($e);
         }
     }
 
@@ -46,11 +46,10 @@ final class Pool
 
         if (!self::$configs) {
             self::$configs = Utils::getConfigFiles('mysql');
-            self::$debug = Utils::getConfigFiles('system')['debug'];
         }
 
         if (!self::$logger) {
-            self::$logger = new Logger("Mysql");
+            self::$logger = new Logger("PoolMysql");
         }
         if (!array_key_exists('pool_size', self::$configs)) {
             self::$configs['pool_size'] = 1;
@@ -65,7 +64,8 @@ final class Pool
     {
         $sql = new Query($query, $parameters);
         self::$queries_runned++;
-        return Connector::queueQuery($sql)->then(fn ($result) => $result, function ($e) use ($query, $parameters) {
+        return Connector::queueQuery($sql)->then(fn ($result) => $result, function (Exception $e) use ($query, $parameters) {
+            self::$logger->exception($e);
             self::$list_rejected_queries[] = [
                 'query' => $query,
                 'params' => $parameters
@@ -74,10 +74,7 @@ final class Pool
                 self::$queries_timeout++;
             else
                 self::$queries_rejectes++;
-            if(self::$debug)
-            {
-                echo "ERROR Query - " . $e->getMessage() . PHP_EOL;
-            }
+           
             return $e;
         });
     }

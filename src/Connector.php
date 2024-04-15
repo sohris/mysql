@@ -39,13 +39,6 @@ class Connector
     private $timer_check_query;
     private $timeout;
 
-    private $stats = [
-        "runned_queries" => 0,
-        "rejected_queries" => 0,
-        "last_run" => 0,
-        "start" => 0
-    ];
-
 
     public function __construct()
     {
@@ -74,7 +67,7 @@ class Connector
                 $mysql->set_charset(self::$configs['charset']);
             return $mysql;
         } catch (Throwable $e) {
-            self::$logger->critical("Can not create Mysqli Connection!", [$e->getMessage()]);
+            self::$logger->critical("Can not create Mysqli Connection! " . $e->getMessage());
         }
         return null;
     }
@@ -124,7 +117,7 @@ class Connector
             return;
         if (!$this->mysql->ping() || !$this->mysql) {
             $this->mysql = $this->createConnection();
-            self::$logger->critical("Reconnect Mysql!");
+            self::$logger->info("Reconnect Mysql!");
             return;
         }
 
