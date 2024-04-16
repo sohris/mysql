@@ -62,7 +62,7 @@ class Connector
     {
         try {
             $mysql = new mysqli(self::$configs['host'], self::$configs['user'], self::$configs['pass'], self::$configs['base'], self::$configs['port']);
-            $mysql->query("SET @@time_zone='UTC';");
+            $mysql->query("SET @@time_zone='+00:00';");
             if (key_exists('charset', self::$configs))
                 $mysql->set_charset(self::$configs['charset']);
             return $mysql;
