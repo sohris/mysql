@@ -2,6 +2,7 @@
 
 namespace Sohris\Mysql;
 
+use Exception;
 use mysqli;
 use React\EventLoop\Loop;
 use React\EventLoop\LoopInterface;
@@ -50,7 +51,8 @@ class Connector
 
     public function __destruct()
     {
-        $this->mysql->close();
+        if (!is_null($this->mysql))
+            $this->mysql->close();
     }
 
     public function close()
@@ -125,7 +127,7 @@ class Connector
         $this->query_running = self::$query_list->dequeue();
         $this->mysql->query($this->query_running['query']->getSQL(), MYSQLI_ASYNC | MYSQLI_USE_RESULT);
         $this->timer_check_query = $this->loop->addPeriodicTimer(0.001, fn () => $this->checkPoll());
-        $this->timeout = $this->loop->addTimer(self::$configs['query_timeout'], fn() => $this->timeoutQuery());
+        $this->timeout = $this->loop->addTimer(self::$configs['query_timeout'], fn () => $this->timeoutQuery());
     }
 
     private function timeoutQuery()
@@ -141,10 +143,15 @@ class Connector
         if (!mysqli_poll($links, $err, $rej, false, 10000))
             return;
         Loop::cancelTimer($this->timeout);
-        if (!$result = $this->mysql->reap_async_query()) {
+        try {
+            if (!$result = $this->mysql->reap_async_query()) {
+                $this->rejectQuery();
+            } else
+                $this->resolveQuery($result);
+        } catch (Exception $e) {
+            self::$logger->exception($e);
             $this->rejectQuery();
-        } else
-            $this->resolveQuery($result);
+        }
         $this->freeConnection();
     }
 
