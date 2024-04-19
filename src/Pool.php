@@ -65,6 +65,7 @@ final class Pool
         $sql = new Query($query, $parameters);
         self::$queries_runned++;
         return Connector::queueQuery($sql)->then(fn ($result) => $result, function (Exception $e) use ($query, $parameters) {
+            self::$logger->debug("Error Query " . $query);
             self::$logger->exception($e);
             self::$list_rejected_queries[] = [
                 'query' => $query,

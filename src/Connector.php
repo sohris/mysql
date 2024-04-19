@@ -57,7 +57,8 @@ class Connector
 
     public function close()
     {
-        $this->mysql->close();
+        if (!is_null($this->mysql))
+            $this->mysql->close();
         unset($this->mysql);
     }
     private static function createConnection()
@@ -113,16 +114,26 @@ class Connector
         return $deferrend->promise();
     }
 
+    private function validConnection()
+    {
+        if ($this->mysql) {
+            try {
+                $this->mysql->ping();
+            } catch (Exception $e) {
+                self::$logger->info("Reconnect Mysql! " . $e->getMessage());
+                $this->mysql = $this->createConnection();
+            }
+        } else {
+            self::$logger->info("Reconnect Mysql!");
+            $this->mysql = $this->createConnection();
+        }
+    }
+
     private function nextQuery()
     {
         if (self::$query_list->isEmpty())
             return;
-        if (!$this->mysql->ping() || !$this->mysql) {
-            $this->mysql = $this->createConnection();
-            self::$logger->info("Reconnect Mysql!");
-            return;
-        }
-
+        $this->validConnection();
         $this->stopTimer();
         $this->query_running = self::$query_list->dequeue();
         $this->mysql->query($this->query_running['query']->getSQL(), MYSQLI_ASYNC | MYSQLI_USE_RESULT);
@@ -190,8 +201,12 @@ class Connector
 
     public static function realEscapeString(string $string)
     {
-        if (!self::$any_connection || !self::$any_connection->ping())
+        try {
+            if (!self::$any_connection || !self::$any_connection->ping())
+                self::$any_connection = self::createConnection();
+        } catch (Exception $e) {
             self::$any_connection = self::createConnection();
+        }
         return self::$any_connection->real_escape_string($string);
     }
 
