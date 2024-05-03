@@ -149,6 +149,8 @@ class Connector
 
     private function checkPoll()
     {
+
+        $this->validConnection();
         $links = $err = $rej = [];
         $links[] = $err[] = $rej[] = $this->mysql;
         if (!mysqli_poll($links, $err, $rej, false, 10000))
