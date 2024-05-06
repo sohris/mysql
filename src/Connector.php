@@ -39,7 +39,7 @@ class Connector
     private $last_running;
     private $timer_check_query;
     private $timeout;
-
+    private $valid_connection_timer;
 
     public function __construct()
     {
@@ -47,12 +47,14 @@ class Connector
         $this->loop = Loop::get();
         $this->mysql = self::createConnection();
         $this->startTimer();
+        $this->valid_connection_timer = Loop::addPeriodicTimer(1, fn () => $this->validConnection());
     }
 
     public function __destruct()
     {
         if (!is_null($this->mysql))
             $this->mysql->close();
+        Loop::cancelTimer($this->valid_connection_timer);
     }
 
     public function close()
@@ -117,14 +119,19 @@ class Connector
     private function validConnection()
     {
         if ($this->mysql) {
-            try {
-                $this->mysql->ping();
-            } catch (Exception $e) {
-                self::$logger->info("Reconnect Mysql! " . $e->getMessage());
-                $this->mysql = $this->createConnection();
-            }
+            if (!$this->running())
+                try {
+                    $this->mysql->ping();
+                } catch (Exception $e) {
+                    self::$logger->info("Reconnect Mysql! " . $e->getMessage());
+                    $this->close();
+                    unset($this->mysql);
+                    $this->mysql = $this->createConnection();
+                }
         } else {
             self::$logger->info("Reconnect Mysql!");
+            $this->close();
+            unset($this->mysql);
             $this->mysql = $this->createConnection();
         }
     }
@@ -149,8 +156,7 @@ class Connector
 
     private function checkPoll()
     {
-        if(is_null($this->mysql))
-        {
+        if (is_null($this->mysql)) {
             $this->validConnection();
         }
         $links = $err = $rej = [];
