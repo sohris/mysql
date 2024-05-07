@@ -17,9 +17,9 @@ class Mysql extends ComponentControl
         $this->server = Server::getServer();
         Pool::createConnection();
         
-        Loop::addPeriodicTimer(10, function (){
-            Pool::checkConnection();
-        });
+        // Loop::addPeriodicTimer(10, function (){
+        //     Pool::checkConnection();
+        // });
     }
 
     public function install()
