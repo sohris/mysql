@@ -29,10 +29,7 @@ class Connector
 
     private static $any_connection;
 
-    /**
-     * @var \SplQueue
-     */
-    private static $query_list;
+    private static array $query_list = [];
 
     private static $configs = [];
     private static $logger;
@@ -84,10 +81,6 @@ class Connector
 
     public function firstRun()
     {
-        if (!self::$query_list) {
-            self::$query_list = new SplQueue;
-        }
-
         if (!self::$configs) {
             self::$configs = Utils::getConfigFiles('mysql');
         }
@@ -117,10 +110,10 @@ class Connector
         self::$logger->debug("Enqueue Query");
         $deferrend = new Deferred();
 
-        self::$query_list->enqueue([
+        self::$query_list[] = [
             "query" => $query,
             "deferrend" => &$deferrend
-        ]);
+        ];
         self::$logger->debug("Returned Deferred");
         return $deferrend->promise();
     }
@@ -150,7 +143,7 @@ class Connector
     private function nextQuery()
     {
 
-        if (self::$query_list->isEmpty())
+        if (count(self::$query_list) <= 0)
             return;
 
         self::$logger->debug("Next Query");
@@ -161,8 +154,7 @@ class Connector
         $this->stopTimer();
 
         self::$logger->debug("Dequeue Query");
-        $this->query_running = self::$query_list->dequeue();
-
+        $this->query_running = array_unshift(self::$query_list);
         self::$logger->debug("Query", [$this->query_running['query']->getSQL()]);
         $this->mysql->query($this->query_running['query']->getSQL(), MYSQLI_ASYNC | MYSQLI_USE_RESULT);
         $this->timer_check_query = $this->loop->addPeriodicTimer(0.001, fn () => $this->checkPoll());
@@ -247,10 +239,7 @@ class Connector
 
     public static function getQueueCount()
     {
-        if (!self::$query_list) {
-            self::$query_list = new SplQueue;
-        }
 
-        return self::$query_list->count();
+        return count(self::$query_list);
     }
 }
