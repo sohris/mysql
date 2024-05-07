@@ -43,8 +43,8 @@ class Connector
 
     public function __construct()
     {
-        self::$logger->debug("Creating Class");
         $this->firstRun();
+        self::$logger->debug("Creating Class");
         $this->loop = Loop::get();
         $this->mysql = self::createConnection();
         $this->startTimer();
