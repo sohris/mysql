@@ -154,7 +154,7 @@ class Connector
         $this->stopTimer();
 
         self::$logger->debug("Dequeue Query");
-        $this->query_running = array_unshift(self::$query_list);
+        $this->query_running = array_shift(self::$query_list);
         self::$logger->debug("Query", [$this->query_running['query']->getSQL()]);
         $this->mysql->query($this->query_running['query']->getSQL(), MYSQLI_ASYNC | MYSQLI_USE_RESULT);
         $this->timer_check_query = $this->loop->addPeriodicTimer(0.001, fn () => $this->checkPoll());
