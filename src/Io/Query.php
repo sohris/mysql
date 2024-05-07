@@ -1,6 +1,6 @@
 <?php
 
-namespace Sohris\Mysql;
+namespace Sohris\Mysql\Io;
 
 final class Query
 {
@@ -8,11 +8,26 @@ final class Query
     private $sql = '';
     private $parameters = [];
 
-    public function __construct(string $query, array $parameters)
+    
+    private $escapeChars = [
+        //"\x00"   => "\\0",
+        //"\r"   => "\\r",
+        //"\n"   => "\\n",
+        //"\t"   => "\\t",
+        //"\b"   => "\\b",
+        //"\x1a" => "\\Z",
+        "'"    => "''",
+        //'"'    => '\"',
+        "\\"   => "\\\\",
+        //"%"    => "\\%",
+        //"_"    => "\\_",
+    ];
+
+
+    public function __construct(string $query, ?array $parameters = [])
     {
         $this->sql = $query;
         $this->parameters = $parameters;
-
     }
     
     private function resolveSQLValue($value)
@@ -26,7 +41,7 @@ final class Query
             case 'integer':
                 break;
             case 'string':
-                $value = "'" . Connector::realEscapeString($value) . "'";
+                $value = "'" . $this->escape($value) . "'";
                 break;
             case 'array':
                 $nvalue = [];
@@ -44,6 +59,11 @@ final class Query
         return $value;
     }
 
+    public function escape($str)
+    {
+        return strtr($str, $this->escapeChars);
+    }
+
     private function bindParams()
     {
         $sql = $this->sql;
@@ -53,14 +73,11 @@ final class Query
             $sql = substr_replace($sql, $replacement, $offset, 1);
             $offset = strpos($sql, '?', $offset + strlen($replacement));
         }
-
         return $sql;
-
     }
 
     public function getSQL()
     {
         return $this->bindParams();
     }
-
 }
