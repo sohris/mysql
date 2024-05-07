@@ -43,6 +43,7 @@ class Connector
 
     public function __construct()
     {
+        self::$logger->debug("Creating Class");
         $this->firstRun();
         $this->loop = Loop::get();
         $this->mysql = self::createConnection();
@@ -52,6 +53,7 @@ class Connector
 
     public function __destruct()
     {
+        self::$logger->debug("Destruct Class");
         if (!is_null($this->mysql))
             $this->mysql->close();
         Loop::cancelTimer($this->valid_connection_timer);
@@ -59,12 +61,15 @@ class Connector
 
     public function close()
     {
+        self::$logger->debug("Close Class");
         if (!is_null($this->mysql))
             $this->mysql->close();
         unset($this->mysql);
     }
     private static function createConnection()
     {
+        
+        self::$logger->debug("Create Connection");
         try {
             $mysql = new mysqli(self::$configs['host'], self::$configs['user'], self::$configs['pass'], self::$configs['base'], self::$configs['port']);
             $mysql->query("SET @@time_zone='+00:00';");
@@ -97,27 +102,33 @@ class Connector
 
     private function startTimer()
     {
+        self::$logger->debug("Stating Check Queue");
         $this->timer = $this->loop->addPeriodicTimer(0.001, fn () => $this->nextQuery());
     }
 
     private function stopTimer()
     {
+        self::$logger->debug("Stopping Class");
         $this->loop->cancelTimer($this->timer);
     }
 
     public static function queueQuery($query)
     {
+        self::$logger->debug("Enqueue Query");
         $deferrend = new Deferred();
 
         self::$query_list->enqueue([
             "query" => $query,
             "deferrend" => &$deferrend
         ]);
+        self::$logger->debug("Returned Deferred");
         return $deferrend->promise();
     }
 
     private function validConnection()
     {
+        
+        self::$logger->debug("Valid Connection");
         if ($this->mysql) {
             if (!$this->running())
                 try {
@@ -138,11 +149,21 @@ class Connector
 
     private function nextQuery()
     {
+
         if (self::$query_list->isEmpty())
             return;
+
+        self::$logger->debug("Next Query");
+        self::$logger->debug("Validate Connection");
         $this->validConnection();
+
+        self::$logger->debug("Stopping Timer");
         $this->stopTimer();
+
+        self::$logger->debug("Dequeue Query");
         $this->query_running = self::$query_list->dequeue();
+
+        self::$logger->debug("Query", [$this->query_running['query']->getSQL()]);
         $this->mysql->query($this->query_running['query']->getSQL(), MYSQLI_ASYNC | MYSQLI_USE_RESULT);
         $this->timer_check_query = $this->loop->addPeriodicTimer(0.001, fn () => $this->checkPoll());
         $this->timeout = $this->loop->addTimer(self::$configs['query_timeout'], fn () => $this->timeoutQuery());
@@ -163,6 +184,8 @@ class Connector
         $links[] = $err[] = $rej[] = $this->mysql;
         if (!mysqli_poll($links, $err, $rej, false, 10000))
             return;
+
+        self::$logger->debug("Pool Check");
         Loop::cancelTimer($this->timeout);
         try {
             if (!$result = $this->mysql->reap_async_query()) {
@@ -195,6 +218,8 @@ class Connector
 
     private function freeConnection()
     {
+        
+        self::$logger->debug("Free Connection");
         mysqli_next_result($this->mysql);
         if ($result = mysqli_store_result($this->mysql))
             mysqli_free_result($result);

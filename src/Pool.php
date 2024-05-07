@@ -62,6 +62,7 @@ final class Pool
 
     public function exec(string $query, array $parameters = []): PromiseInterface
     {
+        self::$logger->debug("Define Query " . $query, $parameters);
         $sql = new Query($query, $parameters);
         self::$queries_runned++;
         return Connector::queueQuery($sql)->then(fn ($result) => $result, function (Exception $e) use ($query, $parameters) {
