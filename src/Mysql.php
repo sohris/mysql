@@ -14,12 +14,7 @@ class Mysql extends ComponentControl
 
     public function __construct()
     {
-        $this->server = Server::getServer();
-        Pool::createConnection();
-        
-        // Loop::addPeriodicTimer(10, function (){
-        //     Pool::checkConnection();
-        // });
+        $this->server = Server::getServer();        
     }
 
     public function install()
@@ -43,10 +38,5 @@ class Mysql extends ComponentControl
         $stats['queries_per_second'] = $stats['total_queries_runned']/$this->server->getUptime();
 
         return $stats;
-    }
-
-    public static function dumpRejectedQueries()
-    {
-        return Pool::dumpRejectedQueries();
     }
 }
