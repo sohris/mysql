@@ -103,7 +103,7 @@ final class Pool
             return;
         }
         $links = $err = $rej = self::$connections;
-        if (!mysqli_poll($links, $err, $rej, 1))
+        if (!mysqli_poll($links, $err, $rej, false, 10000))
             return;
 
         foreach ($links as $key => &$connection) {
