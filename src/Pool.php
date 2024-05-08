@@ -18,6 +18,7 @@ final class Pool
 
     private static $timer;
     private static $min_pool = 2;
+    private static $timeout = 30;
 
     public bool $debug = false;
 
@@ -38,6 +39,11 @@ final class Pool
         $port | $this->port = $port;
         $database | $this->database = $database;
         $socket | $this->socket = $socket;
+    }
+
+    public function setQueryTimeout(int $timeout)
+    {
+        self::$timeout = $timeout;
     }
 
     public function setMinPoolSize(int $size, bool $force_create = false)
@@ -73,6 +79,7 @@ final class Pool
         }
         $this->debug("New Connection");
         $conn =  new Connector($this->user, $this->password, $this->host, $this->port,  $this->database, $this->socket);
+        $conn->setTimeout(self::$timeout);
         self::$connections[$conn->id] = $conn;
         self::$current = $conn->id;
     }
