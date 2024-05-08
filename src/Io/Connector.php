@@ -13,6 +13,8 @@ final class Connector extends mysqli
     private Deferred $deferred;
     public int $id;
     public bool $running = false;
+    private string $query;
+    private array $time = [];
 
     public function __construct(
         ?string $user = '',
@@ -24,13 +26,12 @@ final class Connector extends mysqli
     ) {
 
         parent::__construct();
-        parent::real_connect($host, $user, $password, $database, $port, $socket);
+        parent::connect($host, $user, $password, $database, $port, $socket);
         $this->id = random_int(11111, 99999);
     }
 
     public function __destruct()
     {
-        echo "Closing " . $this->id . PHP_EOL;
         $this->close();
     }
 
@@ -46,6 +47,8 @@ final class Connector extends mysqli
 
     public function finish()
     {
+
+        $this->time[1] = hrtime(true);
         if (!$result = $this->reap_async_query()) {
             $exception = new Exception($this->error, $this->errno);
             $this->deferred->reject($exception);
@@ -72,6 +75,15 @@ final class Connector extends mysqli
     public function runQuery($query)
     {
         $this->running = true;
+        $this->query = $query;
+        $this->time[0] = hrtime(true);
         return $this->query($query, MYSQLI_ASYNC | MYSQLI_STORE_RESULT);
+    }
+
+    public function getStats()
+    {
+        return "Query: " . $this->query . "\n" .
+            "Time: " . ($this->time[1] - $this->time[0]) . "\n" .
+            "Info: " . $this->info;
     }
 }

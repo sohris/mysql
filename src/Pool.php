@@ -19,6 +19,8 @@ final class Pool
     private static $timer;
     private static $min_pool = 2;
 
+    public bool $debug = false;
+
     private static $connections = [];
     private static int $current;
 
@@ -38,17 +40,22 @@ final class Pool
         $socket | $this->socket = $socket;
     }
 
-    public function setMinPoolSize(int $size)
+    public function setMinPoolSize(int $size, bool $force_create = false)
     {
+        $this->debug("Configuring Pool Size $size (" . ($force_create ? 'Force' : 'NonForce') . ")");
         self::$min_pool = $size;
+
+        if ($force_create)
+            while (count(self::$connections) <= $size) {
+                $this->create();
+            }
     }
 
     public function exec(string $query, array $parameters = [])
     {
         $query = new Query($query, $parameters);
         $this->create();
-        $this->current()->setDeferred(new Deferred());   
-        echo $this->current()->id . PHP_EOL;     
+        $this->current()->setDeferred(new Deferred());
         $this->current()->runQuery($query->getSQL(), MYSQLI_ASYNC | MYSQLI_STORE_RESULT);
         $this->validTimer();
         return $this->current()->promise();
@@ -56,13 +63,15 @@ final class Pool
 
     private function create()
     {
+        $this->debug("Get Connection");
         foreach (self::$connections as $id => $conn) {
             if (!$conn->running) {
+                $this->debug("Reusing Connection");
                 self::$current = $id;
                 return;
             }
         }
-
+        $this->debug("New Connection");
         $conn =  new Connector($this->user, $this->password, $this->host, $this->port,  $this->database, $this->socket);
         self::$connections[$conn->id] = $conn;
         self::$current = $conn->id;
@@ -90,9 +99,18 @@ final class Pool
             return;
 
         foreach ($links as $key => &$connection) {
+            $this->debug("Finish Query " . $connection->id);
             $connection->finish();
+            $this->debug($connection->getStats());
             if (self::$min_pool < count(self::$connections))
                 unset(self::$connections[$connection->id]);
         }
+    }
+
+    private function debug(string $message = "")
+    {
+        if (!$this->debug) return;
+        $time = date("Y-m-d H:i:s");
+        printf("$time - DEBUG - $message\n");
     }
 }
