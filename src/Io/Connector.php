@@ -30,6 +30,7 @@ final class Connector extends mysqli
 
     public function __destruct()
     {
+        echo "Closing " . $this->id . PHP_EOL;
         $this->close();
     }
 
@@ -59,6 +60,7 @@ final class Connector extends mysqli
 
             $this->deferred->resolve($query_result);
         }
+        unset($this->deferred);
         mysqli_next_result($this);
         if ($result = mysqli_store_result($this))
             mysqli_free_result($result);
@@ -69,7 +71,7 @@ final class Connector extends mysqli
 
     public function runQuery($query)
     {
-        $this->running = true;        
+        $this->running = true;
         return $this->query($query, MYSQLI_ASYNC | MYSQLI_STORE_RESULT);
     }
 }

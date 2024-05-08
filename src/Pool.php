@@ -47,8 +47,9 @@ final class Pool
     {
         $query = new Query($query, $parameters);
         $this->create();
-        $this->current()->setDeferred(new Deferred());
-        $this->current()->query($query->getSQL(), MYSQLI_ASYNC | MYSQLI_STORE_RESULT);
+        $this->current()->setDeferred(new Deferred());   
+        echo $this->current()->id . PHP_EOL;     
+        $this->current()->runQuery($query->getSQL(), MYSQLI_ASYNC | MYSQLI_STORE_RESULT);
         $this->validTimer();
         return $this->current()->promise();
     }
@@ -58,7 +59,7 @@ final class Pool
         foreach (self::$connections as $id => $conn) {
             if (!$conn->running) {
                 self::$current = $id;
-                return $conn;
+                return;
             }
         }
 
@@ -90,7 +91,7 @@ final class Pool
 
         foreach ($links as $key => &$connection) {
             $connection->finish();
-            if (self::$min_pool > count(self::$connections))
+            if (self::$min_pool < count(self::$connections))
                 unset(self::$connections[$connection->id]);
         }
     }
