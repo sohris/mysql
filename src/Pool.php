@@ -17,9 +17,9 @@ final class Pool
     private string $socket;
 
     private static $timer;
+    private static $min_pool = 2;
 
     private static $connections = [];
-
     private static int $current;
 
     public function __construct(
@@ -38,6 +38,11 @@ final class Pool
         $socket | $this->socket = $socket;
     }
 
+    public function setMinPoolSize(int $size)
+    {
+        self::$min_pool = $size;
+    }
+
     public function exec(string $query, array $parameters = [])
     {
         $query = new Query($query, $parameters);
@@ -50,6 +55,13 @@ final class Pool
 
     private function create()
     {
+        foreach (self::$connections as $id => $conn) {
+            if (!$conn->running) {
+                self::$current = $id;
+                return $conn;
+            }
+        }
+
         $conn =  new Connector($this->user, $this->password, $this->host, $this->port,  $this->database, $this->socket);
         self::$connections[$conn->id] = $conn;
         self::$current = $conn->id;
@@ -78,7 +90,8 @@ final class Pool
 
         foreach ($links as $key => &$connection) {
             $connection->finish();
-            unset(self::$connections[$connection->id]);
+            if (self::$min_pool > count(self::$connections))
+                unset(self::$connections[$connection->id]);
         }
     }
 }

@@ -12,6 +12,8 @@ final class Connector extends mysqli
 {
     private Deferred $deferred;
     public int $id;
+    public bool $running = false;
+
     public function __construct(
         ?string $user = '',
         ?string $password = '',
@@ -60,5 +62,14 @@ final class Connector extends mysqli
         mysqli_next_result($this);
         if ($result = mysqli_store_result($this))
             mysqli_free_result($result);
+
+        $this->running = false;
+    }
+
+
+    public function runQuery($query)
+    {
+        $this->running = true;        
+        return $this->query($query, MYSQLI_ASYNC | MYSQLI_STORE_RESULT);
     }
 }
