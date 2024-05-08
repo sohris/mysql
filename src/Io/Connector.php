@@ -25,7 +25,7 @@ final class Connector extends mysqli
         ?string $socket = ''
     ) {
         parent::__construct();
-        parent::connect($host, $user, $password, $database, $port, $socket);        
+        parent::connect($host, $user, $password, $database, $port, $socket);
         $this->id = random_int(11111, 99999);
     }
 
@@ -53,19 +53,23 @@ final class Connector extends mysqli
     {
 
         $this->time[1] = hrtime(true);
-        if (!$result = $this->reap_async_query()) {
-            $exception = new Exception($this->error, $this->errno);
-            $this->deferred->reject($exception);
-        } else {
-            $query_result = new QueryResult();
-            if ($result === true && $this->insert_id) {
-                $query_result->insertId = $this->insert_id;
+        try {
+            if (!$result = $this->reap_async_query()) {
+                $exception = new Exception($this->error, $this->errno);
+                $this->deferred->reject($exception);
             } else {
-                $query_result->affectedRows = $this->affected_rows;
-                $query_result->resultRows = $result->fetch_all(MYSQLI_ASSOC);
-            }
+                $query_result = new QueryResult();
+                if ($result === true && $this->insert_id) {
+                    $query_result->insertId = $this->insert_id;
+                } else {
+                    $query_result->affectedRows = $this->affected_rows;
+                    $query_result->resultRows = $result->fetch_all(MYSQLI_ASSOC);
+                }
 
-            $this->deferred->resolve($query_result);
+                $this->deferred->resolve($query_result);
+            }
+        } catch (Exception $e) {
+            $this->deferred->reject($e);
         }
         unset($this->deferred);
         mysqli_next_result($this);
