@@ -53,7 +53,7 @@ final class Pool
 
         if ($force_create)
             while (count(self::$connections) <= $size) {
-                $this->create();
+                $this->create(true);
             }
     }
 
@@ -67,16 +67,17 @@ final class Pool
         return $this->current()->promise();
     }
 
-    private function create()
+    private function create(bool $force_create = false)
     {
         $this->debug("Get Connection");
-        foreach (self::$connections as $id => $conn) {
-            if (!$conn->running) {
-                $this->debug("Reusing Connection");
-                self::$current = $id;
-                return;
+        if (!$force_create)
+            foreach (self::$connections as $id => $conn) {
+                if (!$conn->running) {
+                    $this->debug("Reusing Connection");
+                    self::$current = $id;
+                    return;
+                }
             }
-        }
         $this->debug("New Connection");
         $conn =  new Connector($this->user, $this->password, $this->host, $this->port,  $this->database, $this->socket);
         $conn->setTimeout(self::$timeout);
