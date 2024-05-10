@@ -63,7 +63,7 @@ final class Connector extends mysqli
                 $query_result = new QueryResult();
                 if ($result === true && $this->insert_id) {
                     $query_result->insertId = $this->insert_id;
-                } else {
+                } else if ($result !== true) {
                     $query_result->affectedRows = $this->affected_rows;
                     $query_result->resultRows = $result->fetch_all(MYSQLI_ASSOC);
                 }
