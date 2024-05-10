@@ -2,6 +2,7 @@
 
 namespace Sohris\Mysql;
 
+use Exception;
 use React\EventLoop\Loop;
 use React\Promise\Deferred;
 use Sohris\Mysql\Io\Connector;
@@ -73,9 +74,15 @@ final class Pool
         if (!$force_create)
             foreach (self::$connections as $id => $conn) {
                 if (!$conn->running) {
-                    $this->debug("Reusing Connection");
-                    self::$current = $id;
-                    return;
+                    try {
+                        $conn->ping();
+                        $this->debug("Reusing Connection");
+                        self::$current = $id;
+                        return;
+                    } catch (Exception $e) {
+                        $this->debug("Connection down");
+                        unset(self::$connections[$id]);
+                    }
                 }
             }
         $this->debug("New Connection");

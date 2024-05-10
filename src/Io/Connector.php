@@ -22,9 +22,11 @@ final class Connector extends mysqli
         ?string $host = '',
         ?int $port = 3306,
         ?string $database = '',
-        ?string $socket = ''
+        ?string $socket = '',
+        int $connection_timeout = 5
     ) {
         parent::__construct();
+        mysqli_options($this, MYSQLI_OPT_CONNECT_TIMEOUT, $connection_timeout);
         parent::connect($host, $user, $password, $database, $port, $socket);
         $this->id = random_int(11111, 99999);
     }
